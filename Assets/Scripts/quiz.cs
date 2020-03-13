@@ -12,15 +12,22 @@ public class quiz : MonoBehaviour {
     public Text questionBox; 
     public Text[] answerBoxes;
 
+    public Text scoreText;
+    public Text highScoreText;
+
+    int score;
+
     float countdown;
-    float countdownTime = 60;
+    public float countdownTime = 10;
     float startTime;
 
-    public Text countdownText;
+    public Slider countdownSlider;
     bool isPlaying = false;
 
     public Transform nextScreen;
     int state = 0;
+
+    Color32 baseImageColor;
 
     List<int> posTaken = new List<int>();
     Vector3[] possiblePositions = {new Vector3(-250, -200, 0), 
@@ -30,11 +37,13 @@ public class quiz : MonoBehaviour {
 
     public void Start() {
         currentRound = 0;
+        baseImageColor = answerBoxes[0].transform.parent.GetComponent<Image>().color;
     }
 
     public void PlayRound(int rounds) {
         currentRound += rounds;
         makeQuiz();
+        Reset();
         Time.timeScale = 1.0f;
         isPlaying = true;
         startTime = Time.time;
@@ -43,15 +52,26 @@ public class quiz : MonoBehaviour {
     void Update() {
         if (isPlaying) {
             countdown = countdownTime - (Time.time - startTime);
-            if (countdown > 0)
-                countdownText.text = countdown.ToString("F0");
-            else {
-                countdownText.text = "0";
+            countdownSlider.value = countdown / countdownTime;
+
+            if (countdown < 0) {
                 CheckAnswer(-1);
+                Debug.Log("Over");
             }
+        } else {
+            int highScore = PlayerPrefs.GetInt("HighScore", 0);
+            if (score > highScore)
+                highScore = score;
+                PlayerPrefs.SetInt("HighScore", highScore);
+            highScoreText.text = "High Score: " + highScore.ToString();
         }
 
         currentRoundText.text = "Round " + (currentRound + 1).ToString();
+
+        if (score > 0)
+            scoreText.text = "Score: " + score.ToString("F0");
+        else
+            scoreText.text = "Score: 0";
     }
 
     void makeQuiz() {
@@ -74,23 +94,28 @@ public class quiz : MonoBehaviour {
     }
 
     public void CheckAnswer(int answerIndex) {
-        questionBox.gameObject.SetActive(false);
-        countdownText.gameObject.SetActive(false);
-        nextScreen.gameObject.SetActive(true);
-        
-        isPlaying = false;
-        Time.timeScale = 0.0f;
+        if (answerIndex <= 0) {
+            questionBox.gameObject.SetActive(false);
+            countdownSlider.gameObject.SetActive(false);
+            nextScreen.gameObject.SetActive(true);    
+            isPlaying = false;
+            Time.timeScale = 0.0f;
+        }
 
-        if (answerIndex != 0) {
+        if (answerIndex < 0) { // Countdown Over 
             nextScreen.GetChild(0).GetComponent<Text>().text = "You Lost!";
             nextScreen.GetChild(1).transform.GetChild(0).GetComponent<Text>().text = "Try Again";
-            nextScreen.GetComponent<Image>().color = new Color32(150, 40, 35, 180);
+            nextScreen.GetChild(0).GetComponent<Text>().color = new Color32(255, 92, 84, 255);
+            answerBoxes[0].transform.parent.GetChild(0).gameObject.SetActive(true);
             state = 0;
-        } else {
+        } else if (answerIndex == 0) { // Correct Answer
             nextScreen.GetChild(0).GetComponent<Text>().text = "You Won!";
             nextScreen.GetChild(1).transform.GetChild(0).GetComponent<Text>().text = "Continue";
-            nextScreen.GetComponent<Image>().color = new Color32(40, 150, 35, 180);
+            nextScreen.GetChild(0).GetComponent<Text>().color = new Color32(92, 255, 84, 255);
+            score += 20;
             state = 1;
+
+            answerBoxes[answerIndex].transform.parent.GetChild(0).gameObject.SetActive(true);
 
             if (currentRound >= pairs.Length - 1) {
                 nextScreen.GetChild(1).gameObject.SetActive(false);
@@ -101,15 +126,34 @@ public class quiz : MonoBehaviour {
                 nextScreen.GetChild(2).GetComponent<RectTransform>().transform.localPosition = 
                 new Vector3(0, 100, 0);
             }
+        } else { // Wrong Answer
+            answerBoxes[answerIndex].transform.parent.GetComponent<Button>().enabled = false;
+            baseImageColor.a = 150;
+            answerBoxes[answerIndex].transform.parent.GetComponent<Image>().color = baseImageColor;
+            answerBoxes[answerIndex].transform.parent.GetChild(0).gameObject.SetActive(true);
+            startTime -= (countdownTime / 3);
+            score -= 4;
+        }
+    }
+
+    void Reset() {
+        questionBox.gameObject.SetActive(true);
+        countdownSlider.gameObject.SetActive(true);
+        nextScreen.gameObject.SetActive(false);
+
+        foreach (Text answerBox in answerBoxes) {
+            answerBox.transform.parent.GetComponent<Button>().enabled = true;
+            baseImageColor.a = 255;
+            answerBox.transform.parent.GetComponent<Image>().color = baseImageColor;
+            answerBox.transform.parent.GetChild(0).gameObject.SetActive(false);
         }
     }
 
     public void NextStage() {
-        PlayRound(state);
+        if (state == 0)
+            currentRound = 0;
 
-        questionBox.gameObject.SetActive(true);
-        countdownText.gameObject.SetActive(true);
-        nextScreen.gameObject.SetActive(false);
+        PlayRound(state);
     }
 
     public void Exit() {
